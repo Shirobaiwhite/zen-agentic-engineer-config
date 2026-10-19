@@ -1,44 +1,48 @@
-# agentic-config shell pieces
-# Source of truth: this repo's shell.zsh
-# Sourced from ~/.zshrc by install.sh
+# agentic-config shell helpers; sourced from ~/.zshrc by install.sh.
 
-# Prevent Ctrl-S / Ctrl-Q from freezing the terminal
+# Prevent Ctrl-S / Ctrl-Q from freezing the terminal.
 stty -ixon 2>/dev/null
 
-# 4-pane Claude workspace in the current working directory
-#   pane 0,1: default effort
-#   pane 2:   CLAUDE_CODE_EFFORT_LEVEL=medium
-#   pane 3:   CLAUDE_CODE_EFFORT_LEVEL=low
-# Each invocation creates a fresh session (unique name per call).
+# Each invocation creates a fresh four-pane Codex workspace in $PWD.
+# After tiling, pane indexes 0/1 use xhigh effort, 2 high, and 3 medium.
+# The configured model, permissions, and approval policy remain in effect.
 t() {
+  local dependency
+  for dependency in tmux codex; do
+    if ! command -v "$dependency" >/dev/null 2>&1; then
+      print -u2 "Missing dependency: $dependency. See agentic-config README.md."
+      return 1
+    fi
+  done
+
   local dir="$PWD"
-  # Always fresh: unique session name per invocation (basename + timestamp).
-  local session="cwork-$(basename "$dir")-$$-$(date +%s)"
-
-  # Launch claude as each pane's argv (not via send-keys) so we don't race
-  # against .zshrc sourcing / instant-prompt plugins. `exec zsh` keeps the
-  # pane alive with a shell prompt after claude exits.
-  # After `select-layout tiled`, panes land as:
-  #   index 0 = top-left  (high)
-  #   index 1 = top-right (high)
-  #   index 2 = bottom-left  (medium)
-  #   index 3 = bottom-right (low)
+  local project="${PWD:t}"
+  project="${project//[^a-zA-Z0-9_-]/_}"
+  local session="codex-${project}-$$-$(date +%s)-$RANDOM"
   local p0 p1 p2 p3
-  p0=$(tmux new-session  -d  -s "$session" -c "$dir" -n claude -P -F '#{pane_id}' \
-       'claude; exec zsh')
-  p1=$(tmux split-window -h -t "$p0" -c "$dir" -e CLAUDE_CODE_EFFORT_LEVEL=medium -P -F '#{pane_id}' \
-       'claude; exec zsh')
-  p2=$(tmux split-window -v -t "$p0" -c "$dir"                                    -P -F '#{pane_id}' \
-       'claude; exec zsh')
-  p3=$(tmux split-window -v -t "$p1" -c "$dir" -e CLAUDE_CODE_EFFORT_LEVEL=low    -P -F '#{pane_id}' \
-       'claude; exec zsh')
-  tmux select-layout -t "$session:0" tiled
-  tmux select-pane -t "$p0"
 
-  if [ -n "$TMUX" ]; then
+  # Pass commands directly to tmux to avoid racing shell startup/send-keys.
+  # These panes share a checkout; use separate worktrees for overlapping edits.
+  p0=$(tmux new-session -d -s "$session" -c "$dir" -n codex -x 180 -y 50 -P -F '#{pane_id}' \
+       "codex -c 'model_reasoning_effort=\"xhigh\"'; exec zsh") || return 1
+  if ! {
+    p1=$(tmux split-window -h -t "$p0" -c "$dir" -P -F '#{pane_id}' \
+         "codex -c 'model_reasoning_effort=\"high\"'; exec zsh") &&
+    p2=$(tmux split-window -v -t "$p0" -c "$dir" -P -F '#{pane_id}' \
+         "codex -c 'model_reasoning_effort=\"xhigh\"'; exec zsh") &&
+    p3=$(tmux split-window -v -t "$p1" -c "$dir" -P -F '#{pane_id}' \
+         "codex -c 'model_reasoning_effort=\"medium\"'; exec zsh") &&
+    tmux select-layout -t "$session:0" tiled &&
+    tmux select-pane -t "$p0"
+  }; then
+    tmux kill-session -t "$session"
+    return 1
+  fi
+
+  if [ -n "${TMUX:-}" ]; then
     tmux switch-client -t "$session"
   else
-    tmux attach -t "$session"
+    tmux attach-session -t "$session"
   fi
 }
 

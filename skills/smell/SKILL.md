@@ -1,44 +1,21 @@
 ---
-description: Scan git diff vs target branch for code smells (Clean Code + GoF + Python catalog)
-argument-hint: "[target-branch]"
-allowed-tools: Bash(git:*), Read, Grep, Glob
+name: smell
+description: Review changes against a target Git branch for code smells using Clean Code, Gang of Four, and Python catalogs. Use when asked for a smell review or invoked as $smell, optionally followed by a base branch.
 ---
 
-# /smell — Code smell review
+# Code smell review
 
-You are running a 5-step code-smell review. Follow the steps **in order**. Do not skip any. Do not invent findings. Cite catalog IDs verbatim from the lists below.
+Run this five-step review in order. Do not invent findings. Cite catalog IDs verbatim from the lists below. Review only; edit files only if the user also requests fixes. Treat catalog entries as review lenses: report a concrete consequence, rather than recommending patterns merely because they are absent.
 
 ---
 
 ## Step 1 — Ingest
 
-The diff below has already been collected. Read it carefully before proceeding. It contains both the committed changes vs the base (3-dot `base...HEAD`) **and** the working-tree changes (staged + unstaged).
+From the repository under review, run the bundled [scripts/collect_diff.sh](scripts/collect_diff.sh) using its absolute path, resolved relative to this `SKILL.md`. Pass the user's target branch as a single quoted argument, or omit it to detect the default branch. For example, `$smell main` means `bash "<skill-directory>/scripts/collect_diff.sh" "main"`.
 
-!`bash -c '
-BASE="$1"
-if [ -z "$BASE" ]; then
-  BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed "s@^refs/remotes/@@")
-  [ -z "$BASE" ] && BASE="origin/main"
-  git rev-parse "$BASE" >/dev/null 2>&1 || BASE="main"
-fi
-if ! git rev-parse "$BASE" >/dev/null 2>&1; then
-  echo "ERROR: base $BASE not found. Pass an explicit branch: /smell <branch>"
-  exit 1
-fi
-echo "===== BASE: $BASE ====="
-echo
-echo "----- Stat (committed vs $BASE) -----"
-git diff --stat "$BASE"...HEAD || true
-echo
-echo "----- Stat (working tree, staged+unstaged) -----"
-git diff --stat HEAD || true
-echo
-echo "===== Committed diff (vs $BASE, -U10) ====="
-git diff -U10 "$BASE"...HEAD || true
-echo
-echo "===== Working-tree diff (staged + unstaged, -U10) ====="
-git diff -U10 HEAD || true
-' -- "$ARGUMENTS"`
+Read the collected committed changes (`base...HEAD`) and working-tree changes (`HEAD`, staged plus unstaged). Inspect the listed untracked source files separately; their contents are not included in `git diff`. Read surrounding code as needed to confirm consequences and cite current file line numbers. Count unique changed files across these sources.
+
+If there is no valid base, no initial commit, or no merge base, report the collection error and request a valid comparison ref or missing history. Do not silently review an empty diff. For a large diff, collect and inspect it in per-file batches so no hunks disappear through tool output truncation. Do not fetch, switch branches, or change the working tree as part of collection.
 
 ---
 
@@ -229,4 +206,4 @@ Sort findings by severity (desc), then by file path. Emit **exactly this structu
 
 If the diff has no findings, emit the same structure with an empty Findings section and an explicit "No catalog findings on this diff." line, plus the Synthesis paragraph.
 
-Begin now with Step 2.
+Start with Step 1, then complete Steps 2–5.

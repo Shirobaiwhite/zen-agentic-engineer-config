@@ -1,120 +1,68 @@
 #!/usr/bin/env bash
-# Idempotent installer for agentic-config:
-#  - symlink ~/.tmux.conf -> repo's tmux.conf (backing up any existing file)
-#  - append `source <repo>/shell.zsh` to ~/.zshrc (if missing)
-#  - merge statusLine + hooks into ~/.claude/settings.json (preserving existing keys)
-#  - symlink slash commands from .claude/commands/ into ~/.claude/commands/
-
+# Install the tmux/zsh workspace and Codex skill without replacing user settings.
 set -euo pipefail
 
-# Resolve the repo root from this script's own location, so the installer works
-# no matter what folder the repo was cloned into.
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-TMUX_SRC="$REPO/tmux.conf"
-TMUX_DST="$HOME/.tmux.conf"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_CONFIG_DIR="${CODEX_HOME:-$HOME/.codex}"
 ZSHRC="$HOME/.zshrc"
-SHELL_SRC="$REPO/shell.zsh"
-SHELL_LINE="source \"$REPO/shell.zsh\"  # agentic-config"
-SETTINGS="$HOME/.claude/settings.json"
+printf -v SHELL_LINE 'source %q  # agentic-config' "$REPO/shell.zsh"
 
-ts() { date +%Y%m%d-%H%M%S; }
-
-say()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m!\033[0m %s\n' "$*"; }
-
-# --- tmux symlink ---
-if [ -L "$TMUX_DST" ] && [ "$(readlink "$TMUX_DST")" = "$TMUX_SRC" ]; then
-  say "~/.tmux.conf already linked"
-elif [ -e "$TMUX_DST" ] || [ -L "$TMUX_DST" ]; then
-  bak="${TMUX_DST}.bak.$(ts)"
-  mv "$TMUX_DST" "$bak"
-  warn "backed up existing ~/.tmux.conf -> $bak"
-  ln -s "$TMUX_SRC" "$TMUX_DST"
-  say "symlinked ~/.tmux.conf -> $TMUX_SRC"
-else
-  ln -s "$TMUX_SRC" "$TMUX_DST"
-  say "symlinked ~/.tmux.conf -> $TMUX_SRC"
-fi
-
-# --- zshrc source line ---
-if [ -f "$ZSHRC" ] && grep -Fq '# agentic-config' "$ZSHRC"; then
-  say "~/.zshrc already sources shell.zsh"
-else
-  {
-    printf '\n# agentic-config (tmux/shell helpers)\n'
-    printf '%s\n' "$SHELL_LINE"
-  } >>"$ZSHRC"
-  say "appended source line to ~/.zshrc"
-fi
-
-# --- chmod scripts ---
-chmod +x "$REPO/statusline.sh" "$REPO/statusline-daemon.sh" "$REPO/install.sh" "$REPO/bin/clip"
-
-# --- claude settings.json merge ---
-mkdir -p "$(dirname "$SETTINGS")"
-if ! command -v jq >/dev/null 2>&1; then
-  warn "jq not found; skipping settings.json merge. Install jq and re-run."
-else
-  if [ -f "$SETTINGS" ]; then
-    cp "$SETTINGS" "${SETTINGS}.bak.$(ts)"
-  else
-    echo '{}' >"$SETTINGS"
+say() { printf '✓ %s\n' "$*"; }
+backup() {
+  local saved="$1.bak.$(date +%Y%m%d-%H%M%S).$$"
+  cp -p "$1" "$saved"
+  say "backed up $1 -> $saved"
+}
+link_file() {
+  local src="$1" dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
+    say "$dst already linked"
+    return
   fi
-  tmp=$(mktemp)
-  jq \
-    --arg sl "$REPO/statusline.sh" \
-    --arg start "$REPO/statusline-daemon.sh start" \
-    --arg stop  "$REPO/statusline-daemon.sh stop" \
-    '
-    .statusLine = { "type": "command", "command": $sl, "padding": 0 }
-    | .hooks = ((.hooks // {})
-        | .SessionStart = [{ "hooks": [{ "type": "command", "command": $start }] }]
-        | .Stop         = [{ "hooks": [{ "type": "command", "command": $stop  }] }])
-    ' "$SETTINGS" >"$tmp"
-  mv "$tmp" "$SETTINGS"
-  say "merged statusLine + hooks into $SETTINGS"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    local saved="$dst.bak.$(date +%Y%m%d-%H%M%S).$$"
+    mv "$dst" "$saved"
+    say "backed up $dst -> $saved"
+  fi
+  ln -s "$src" "$dst"
+  say "linked $dst -> $src"
+}
+
+# Validate prerequisites before changing user files.
+for dependency in codex tmux zsh python3; do
+  if ! command -v "$dependency" >/dev/null 2>&1; then
+    printf 'Missing dependency: %s. See README.md.\n' "$dependency" >&2
+    exit 1
+  fi
+done
+if ! python3 -c 'import tomllib' 2>/dev/null; then
+  printf 'Python 3.11 or later is required.\n' >&2
+  exit 1
 fi
 
-# --- slash commands ---
-mkdir -p "$HOME/.claude/commands"
-if [ -d "$REPO/.claude/commands" ]; then
-  shopt -s nullglob
-  for src in "$REPO"/.claude/commands/*.md; do
-    name=$(basename "$src")
-    dst="$HOME/.claude/commands/$name"
-    if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
-      say "~/.claude/commands/$name already linked"
-    elif [ -e "$dst" ] || [ -L "$dst" ]; then
-      mv "$dst" "${dst}.bak.$(ts)"
-      ln -s "$src" "$dst"
-      warn "backed up existing ~/.claude/commands/$name; relinked"
-    else
-      ln -s "$src" "$dst"
-      say "symlinked ~/.claude/commands/$name -> $src"
-    fi
-  done
-fi
+python3 "$REPO/scripts/configure_codex.py" "$CODEX_CONFIG_DIR/config.toml"
+link_file "$REPO/tmux.conf" "$HOME/.tmux.conf"
+link_file "$REPO/bin/clip" "$HOME/.local/bin/agentic-clip"
+link_file "$REPO/skills/smell" "$HOME/.agents/skills/smell"
 
-# --- clip symlink (stable path referenced by tmux.conf) ---
-mkdir -p "$HOME/.claude/bin"
-CLIP_SRC="$REPO/bin/clip"
-CLIP_DST="$HOME/.claude/bin/clip"
-if [ -L "$CLIP_DST" ] && [ "$(readlink "$CLIP_DST")" = "$CLIP_SRC" ]; then
-  say "~/.claude/bin/clip already linked"
-elif [ -e "$CLIP_DST" ] || [ -L "$CLIP_DST" ]; then
-  mv "$CLIP_DST" "${CLIP_DST}.bak.$(ts)"
-  ln -s "$CLIP_SRC" "$CLIP_DST"
-  warn "backed up existing ~/.claude/bin/clip; relinked"
+if [ -f "$ZSHRC" ] && grep -Fqx -- "$SHELL_LINE" "$ZSHRC"; then
+  say "$ZSHRC already sources shell.zsh"
 else
-  ln -s "$CLIP_SRC" "$CLIP_DST"
-  say "symlinked ~/.claude/bin/clip -> $CLIP_SRC"
+  if [ -f "$ZSHRC" ]; then
+    backup "$ZSHRC"
+  fi
+  printf '\n%s\n' "$SHELL_LINE" >>"$ZSHRC"
+  say "appended source line to $ZSHRC"
 fi
 
-cat <<EOF
+cat <<'EOF'
 
 Next steps:
-  1. exec zsh                          # reload shell to pick up t/cwork + stty -ixon
-  2. tmux source ~/.tmux.conf          # if tmux is already running
-  3. t                                 # launch the 4-pane Claude workspace
-  4. Open a new Claude Code session    # status bar + /smell command available
+  1. codex login                       # if not already signed in
+  2. exec zsh                          # reload shell helpers
+  3. tmux source-file ~/.tmux.conf      # if tmux is already running
+  4. t                                 # launch the 4-pane Codex workspace
+  5. In Codex: $smell main              # review against a target branch
+     /statusline                       # customize the native footer
 EOF
