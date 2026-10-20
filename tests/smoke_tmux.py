@@ -67,7 +67,7 @@ t
                 pane_id, index, left, top = row.split("|")
                 cwd, argv = calls[pane_id]
                 assert Path(cwd).resolve() == root, cwd
-                assert argv == f'-c model_reasoning_effort="{effort}"', argv
+                assert argv == f'-c tui.fullscreen_transcript=true -c model_reasoning_effort="{effort}"', argv
                 print(f"pane {index}: {effort} effort at ({left}, {top})")
             bindings = tmux("list-keys", "-T", "copy-mode-vi")
             assert "agentic-clip" in bindings and ".claude" not in bindings

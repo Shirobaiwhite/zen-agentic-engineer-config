@@ -1,0 +1,39 @@
+{
+  "Profiles": [
+    {
+      "Name": "Codex Editing",
+      "Guid": "29C7CDB1-2C82-4D2B-B874-3D80E87BA834",
+      "Mouse Reporting": true,
+      "Keyboard Map": {
+        "0xd-0x20000": {
+          "Action": 11,
+          "Text": "0x0a"
+        },
+        "0xf702-0x300000": {
+          "Action": 11,
+          "Text": "0x01"
+        },
+        "0xf703-0x300000": {
+          "Action": 11,
+          "Text": "0x05"
+        },
+        "0xf702-0x280000": {
+          "Action": 11,
+          "Text": "0x1b 0x62"
+        },
+        "0xf703-0x280000": {
+          "Action": 11,
+          "Text": "0x1b 0x66"
+        },
+        "0x7f-0x100000": {
+          "Action": 11,
+          "Text": "0x15"
+        },
+        "0x7f-0x80000": {
+          "Action": 11,
+          "Text": "0x1b 0x7f"
+        }
+      }
+    }
+  ]
+}

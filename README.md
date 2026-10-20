@@ -27,6 +27,28 @@ From your project directory, run `t` (or `cwork`) to open a fresh four-pane Code
 
 Each pane uses `codex -c 'model_reasoning_effort="…"'`. Your configured model and permissions apply; choose a model that supports these effort levels. Exiting Codex returns to zsh. Each call to `t` creates a separate tmux session, and calling it inside tmux switches to that session.
 
+`t` also enables Codex's fullscreen transcript (`tui.fullscreen_transcript=true`), which supports clicking inside the prompt to position the text cursor. The existing tmux `mouse on` setting forwards these clicks to Codex. Existing Codex processes keep their current mode; open a fresh workspace, or use `/tui` to choose Fullscreen for a subsequent launch.
+
+For VS Code-style input shortcuts in iTerm2, run:
+
+```sh
+./install.sh --iterm2
+```
+
+This adds a **Codex Editing** dynamic profile and makes it the default for new iTerm2 windows. It inherits the appearance of your previous default profile, preserves other profile key mappings, and backs up any replaced settings outside iTerm2's watched DynamicProfiles directory. Open **Profiles → Codex Editing**, then run `t` in the new window.
+
+| Input | Behavior |
+| --- | --- |
+| Enter | Send prompt |
+| Shift+Enter | Insert a line break |
+| Cmd+Left / Cmd+Right | Beginning / end of the current line |
+| Option+Left / Option+Right | Previous / next word |
+| Cmd+Backspace | Delete backward to the beginning of the line |
+| Option+Backspace | Delete the previous word |
+| Click inside the prompt | Move the insertion cursor to the clicked position |
+
+The profile uses explicit byte mappings for these keys, so it does not need to remap all Command or Option combinations. Keyboard actions and native click placement were verified against Codex CLI 0.163.0 in tmux. The profile format follows iTerm2's [dynamic profile documentation](https://iterm2.com/documentation-dynamic-profiles.html). For cursor placement in the shell outside Codex, iTerm2 also provides [Option-click movement](https://iterm2.com/documentation-preferences-pointer.html).
+
 The panes share the current checkout. Use separate Git worktrees when working on overlapping files. Detach with `Ctrl-b d`; list sessions with `tmux ls`, and reconnect with `tmux attach -t <session-name>`.
 
 The native footer shows the model and reasoning effort, Git branch, context remaining, and current directory. Customize it with `/statusline` inside Codex. It uses [`tui.status_line`](https://learn.chatgpt.com/docs/config-file/config-reference), so a background daemon, hook, or `jq` is not needed. An existing `tui.status_line` is preserved, including an empty list that hides the footer. An inline `tui = { ... }` table is left untouched; use `/statusline` to configure it.
@@ -62,3 +84,5 @@ python3 -m unittest discover -s tests -v
 ```
 
 To also check real tmux pane creation and configuration on a temporary socket (using fake Codex processes), run `python3 tests/smoke_tmux.py`.
+
+With a signed-in Codex CLI, `python3 tests/smoke_codex_input.py` checks the profile's navigation, newline, deletion, and plain-click input through a real tmux client into an unsent Codex draft. It does not submit a prompt to a model.

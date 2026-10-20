@@ -2,6 +2,17 @@
 # Install the tmux/zsh workspace and Codex skill without replacing user settings.
 set -euo pipefail
 
+CONFIGURE_ITERM2=0
+case "${1:-}" in
+  "") ;;
+  --iterm2) CONFIGURE_ITERM2=1 ;;
+  *) printf 'usage: %s [--iterm2]\n' "$0" >&2; exit 2 ;;
+esac
+if [ "$#" -gt 1 ]; then
+  printf 'usage: %s [--iterm2]\n' "$0" >&2
+  exit 2
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODEX_CONFIG_DIR="${CODEX_HOME:-$HOME/.codex}"
 ZSHRC="$HOME/.zshrc"
@@ -54,6 +65,10 @@ else
   fi
   printf '\n%s\n' "$SHELL_LINE" >>"$ZSHRC"
   say "appended source line to $ZSHRC"
+fi
+
+if [ "$CONFIGURE_ITERM2" -eq 1 ]; then
+  python3 "$REPO/scripts/configure_iterm2.py" --set-default
 fi
 
 cat <<'EOF'

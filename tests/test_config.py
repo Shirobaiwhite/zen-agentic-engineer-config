@@ -202,6 +202,7 @@ t
                     env.pop("TMUX", None)
                 self.run_command("zsh", "-f", "-c", script, "--", str(REPO / "shell.zsh"), env=env)
                 calls = log.read_text()
+                self.assertEqual(calls.count("tui.fullscreen_transcript=true"), 4)
                 self.assertEqual(calls.count('model_reasoning_effort="xhigh"'), 2)
                 self.assertEqual(calls.count('model_reasoning_effort="high"'), 1)
                 self.assertEqual(calls.count('model_reasoning_effort="medium"'), 1)
